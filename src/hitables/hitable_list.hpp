@@ -7,12 +7,22 @@
 class Hitable_List : public Hitable {
  public:
   __device__ Hitable_List() {}
+
   __device__ Hitable_List(Hitable** l, int n) {
     list = l;
     list_size = n;
   }
+
   __device__ virtual bool hit(const Ray& r, float tmin, float tmax,
                               Hit_Record& rec) const;
+
+  __device__ virtual void free() const {
+    for (int i = 0; i < list_size; i++) {
+      list[i]->free();
+      delete list[i];
+    }
+  }
+
   Hitable** list;
   int list_size;
 };

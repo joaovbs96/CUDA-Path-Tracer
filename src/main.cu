@@ -8,6 +8,7 @@
 
 #include "camera.hpp"
 #include "common.hpp"
+#include "miss.hpp"
 #include "random.hpp"
 #include "util.hpp"
 
@@ -72,7 +73,8 @@ int Save_PNG(float3 *fb, int width, int height, int samples) {
   return stbi_write_png(name, width, height, 3, arr, 0);
 }
 
-D_FUNCTION float3 color(const Ray &ray, Hitable **world, uint &seed) {
+D_FUNCTION float3 color(const Ray &ray, Hitable **world, Miss **background,
+                        uint &seed) {
   Ray cur_ray = ray;
 
   // float3 origin, direction;
@@ -96,13 +98,7 @@ D_FUNCTION float3 color(const Ray &ray, Hitable **world, uint &seed) {
 
     // if not, ray missed. Light it with background color and return
     else {
-      float3 unit_direction = normalize(cur_ray.direction);
-      float t = 0.5f * (unit_direction.y + 1.0f);
-
-      float3 c = (1.0f - t) * make_float3(1.0f);
-      c += t * make_float3(0.5f, 0.7f, 1.0f);
-
-      return throughput * c;
+      return throughput * (*background)->sample(cur_ray);
     }
 
     // origin = rec.hit_point;
@@ -118,12 +114,17 @@ D_FUNCTION float3 color(const Ray &ray, Hitable **world, uint &seed) {
 }
 
 G_FUNCTION void create_world(Hitable **d_list, Hitable **d_world,
-                             Camera **d_camera, float width, float height) {
+                             Camera **d_camera, Miss **d_miss, float width,
+                             float height) {
   if (threadIdx.x == 0 && blockIdx.x == 0) {
     // get RNG seed
     uint seed = tea<64>(width, height);
 
     int i = 0;
+
+    *d_miss =
+        new Gradient_Background(make_float3(1.f),               // white
+                                make_float3(0.5f, 0.7f, 1.f));  // light blue
 
     // ground sphere
     d_list[i++] = new Sphere(make_float3(0.f, -1000.f, 0.f), 1000.f,
@@ -177,14 +178,11 @@ G_FUNCTION void create_world(Hitable **d_list, Hitable **d_world,
 }
 
 G_FUNCTION void free_world(Hitable **d_list, Hitable **d_world,
-                           Camera **d_camera) {
-  for (int i = 0; i < 22 * 22 + 1 + 3; i++) {
-    delete ((Sphere *)d_list[i])->brdf;
-    // TODO: add a free method to hitable list
-    delete d_list[i];
-  }
+                           Camera **d_camera, Miss **d_miss) {
+  (*d_world)->free();
   delete *d_world;
   delete *d_camera;
+  delete *d_miss;
 }
 
 G_FUNCTION void render(float3 *fb, float3 *fb_acc,  // frame buffers
@@ -192,7 +190,8 @@ G_FUNCTION void render(float3 *fb, float3 *fb_acc,  // frame buffers
                        int currentSample,           // current sample
                        int samples,                 // total number of samples
                        Camera **cam,                // camera object
-                       Hitable **world)             // scene
+                       Hitable **world,             // scene
+                       Miss **background)           // background
 {
   int i = threadIdx.x + blockIdx.x * blockDim.x;
   int j = threadIdx.y + blockIdx.y * blockDim.y;
@@ -214,7 +213,7 @@ G_FUNCTION void render(float3 *fb, float3 *fb_acc,  // frame buffers
   Ray ray = (*cam)->get_ray(u, v, seed);
 
   // save results
-  fb_acc[pixel_index] += de_nan(color(ray, world, seed));
+  fb_acc[pixel_index] += de_nan(color(ray, world, background, seed));
   fb[pixel_index] = fb_acc[pixel_index];
 }
 
@@ -233,14 +232,15 @@ int main() {
 
   // allocate and create world and camera
   Hitable **d_list;
-  int num_hitables = 22 * 22 + 1 + 3;
-  checkCudaErrors(
-      cudaMalloc((void **)&d_list, num_hitables * sizeof(Hitable *)));
+  const int N_hitables = 22 * 22 + 1 + 3;  // TODO: get it dynamically
+  checkCudaErrors(cudaMalloc((void **)&d_list, N_hitables * sizeof(Hitable *)));
   Hitable **d_world;
   checkCudaErrors(cudaMalloc((void **)&d_world, sizeof(Hitable *)));
   Camera **d_camera;
   checkCudaErrors(cudaMalloc((void **)&d_camera, sizeof(Camera *)));
-  create_world<<<1, 1>>>(d_list, d_world, d_camera, W, H);
+  Miss **d_miss;
+  checkCudaErrors(cudaMalloc((void **)&d_miss, sizeof(Miss *)));
+  create_world<<<1, 1>>>(d_list, d_world, d_camera, d_miss, W, H);
   checkCudaErrors(cudaGetLastError());
   checkCudaErrors(cudaDeviceSynchronize());
 
@@ -253,9 +253,11 @@ int main() {
 
   for (int sample = 0; sample < samples; sample++) {
     render<<<blocks, threads>>>(fb, fb_acc, W, H, sample, samples, d_camera,
-                                d_world);
+                                d_world, d_miss);
     checkCudaErrors(cudaGetLastError());
     checkCudaErrors(cudaDeviceSynchronize());
+
+    printf("Render Progress: %.2f%%     \r", (sample * 100.f) / samples);
   }
 
   stop = clock();
@@ -268,11 +270,13 @@ int main() {
 
   // clean up
   checkCudaErrors(cudaDeviceSynchronize());
-  free_world<<<1, 1>>>(d_list, d_world, d_camera);
+  free_world<<<1, 1>>>(d_list, d_world, d_camera, d_miss);
   checkCudaErrors(cudaGetLastError());
+  checkCudaErrors(cudaDeviceSynchronize());
   checkCudaErrors(cudaFree(d_camera));
   checkCudaErrors(cudaFree(d_world));
   checkCudaErrors(cudaFree(d_list));
+  checkCudaErrors(cudaFree(d_miss));
   checkCudaErrors(cudaFree(fb));
   checkCudaErrors(cudaFree(fb_acc));
 

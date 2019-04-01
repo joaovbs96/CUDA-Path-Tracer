@@ -13,6 +13,9 @@ class Sphere : public Hitable {
 
   __device__ virtual bool hit(const Ray& r, float tmin, float tmax,
                               Hit_Record& rec) const;
+
+  __device__ virtual void free() const { delete brdf; }
+
   float3 center;
   float radius;
   BRDF* brdf;
