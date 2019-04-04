@@ -283,5 +283,7 @@ int main() {
   // useful for cuda-memcheck --leak-check full
   cudaDeviceReset();
 
+  system("PAUSE");
+
   return 0;
 }

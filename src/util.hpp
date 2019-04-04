@@ -14,6 +14,14 @@ inline __host__ __device__ float3 sqrf(const float3 &v) {
   return make_float3(v.x * v.x, v.y * v.y, v.z * v.z);
 }
 
+// swaps values of T class objects a and b
+template <class T>
+inline __host__ __device__ void swap_values(T &a, T &b) {
+  T c(a);
+  a = b;
+  b = c;
+}
+
 // Removes nan values from vector
 inline __device__ float3 de_nan(const float3 &c) {
   float3 temp = c;
@@ -23,6 +31,17 @@ inline __device__ float3 de_nan(const float3 &c) {
   if (!(temp.z == temp.z)) temp.z = 0.f;
 
   return temp;
+}
+
+inline __device__ float get_component(const float3 &c, const int i) {
+  switch (i) {
+    case 0:
+      return c.x;
+    case 1:
+      return c.y;
+    default:
+      return c.z;
+  }
 }
 
 #endif
