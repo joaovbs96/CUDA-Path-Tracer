@@ -14,10 +14,11 @@ D_FUNCTION float3 random_in_unit_disk(uint &seed) {
   return xy;
 }
 
-class Camera {
+class Camera : public Managed {
  public:
-  __device__ Camera(float3 lookfrom, float3 lookat, float3 vup, float vfov,
-                    float aspect, float aperture, float focus_dist) {
+  __host__ __device__ Camera(float3 lookfrom, float3 lookat, float3 vup,
+                             float vfov, float aspect, float aperture,
+                             float focus_dist) {
     lens_radius = aperture / 2;
 
     float theta = vfov * PI / 180.f;
@@ -37,7 +38,7 @@ class Camera {
     vertical = 2.f * half_height * focus_dist * v;
   }
 
-  __device__ Ray get_ray(float s, float t, uint &seed) {
+  __host__ __device__ Ray get_ray(float s, float t, uint &seed) {
     float3 rd = lens_radius * random_in_unit_disk(seed);
     float3 offset = u * rd.x + v * rd.y;
     float3 direction =

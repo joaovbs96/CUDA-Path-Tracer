@@ -5,12 +5,13 @@
 
 class Glass : public BRDF {
  public:
-  __device__ Glass(const float3& a, float ref_idx)
+  __host__ __device__ Glass(const float3& a, float ref_idx)
       : albedo(a), ref_idx(ref_idx) {}
 
-  __device__ virtual bool scatter(const Ray& r_in, const Hit_Record& rec,
-                                  float3& attenuation, Ray& scattered,
-                                  uint& seed) const {
+  __host__ __device__ virtual bool scatter(const Ray& r_in,
+                                           const Hit_Record& rec,
+                                           float3& attenuation, Ray& scattered,
+                                           uint& seed) const {
     float3 outward_normal;
     float3 reflected = reflect(r_in.direction, rec.geometric_normal);
     float ni_over_nt;

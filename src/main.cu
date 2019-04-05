@@ -5,6 +5,7 @@
 #include <time.h>
 #include <iostream>
 #include <string>
+#include <vector>
 
 #include "camera.hpp"
 #include "common.hpp"
@@ -103,17 +104,72 @@ D_FUNCTION float3 color(const Ray &ray, Hitable **world, Miss **background,
 
     // origin = rec.hit_point;
     // direction = target - rec.hit_point;
-
-    // Generate a new ray
-    /*cur_ray = Ray(origin,      // new ray origin
-                  direction);  // new ray direction*/
   }
 
   // Exceeded recursion
   return make_float3(0.f);
 }
 
-G_FUNCTION void create_world(Hitable **d_list, Hitable **d_world,
+void create_world_host(Hitable **d_list, Hitable **d_world, Camera **d_camera,
+                       Miss **d_miss, float width, float height) {
+  uint seed = tea<64>(width, height);  // RND seed
+  std::vector<Hitable *> hitables;     // hitable vector
+
+  // ground sphere
+  hitables.push_back(new Sphere(make_float3(0.f, -1000.f, 0.f), 1000.f,
+                                new Lambertian(make_float3(0.5f))));
+
+  for (int a = -11; a < 11; a++) {
+    for (int b = -11; b < 11; b++) {
+      float p = rnd(seed);
+
+      // random center
+      float3 center =
+          make_float3(a + 0.9f * rnd(seed), 0.2f, b + 0.9f * rnd(seed));
+
+      if (length(center - make_float3(4.f, 0.2, 0.f)) > 0.9) {
+        // random color
+        float3 color = make_float3(rnd(seed), rnd(seed), rnd(seed));
+
+        if (p < (1.f / 3.f)) {
+          hitables.push_back(new Sphere(center, 0.2f, new Lambertian(color)));
+        } else if (p < (2.f / 3.f)) {
+          hitables.push_back(
+              new Sphere(center, 0.2f, new Metal(color, 0.5f * rnd(seed))));
+        } else {
+          hitables.push_back(
+              new Sphere(center, 0.2f, new Glass(make_float3(1.f), 1.5f)));
+        }
+      }
+    }
+  }
+
+  hitables.push_back(new Sphere(make_float3(0.f, 1.f, 0.f), 1.f,
+                                new Glass(make_float3(1.f), 1.5f)));
+  hitables.push_back(new Sphere(make_float3(-4.f, 1.f, 0.f), 1.f,
+                                new Lambertian(make_float3(0.4f, 0.2f, 0.1f))));
+  hitables.push_back(new Sphere(make_float3(4, 1, 0), 1.f,
+                                new Metal(make_float3(0.7f, 0.6f, 0.5f), 0.f)));
+
+  *d_world = new Hitable_List(hitables.data(), hitables.size());
+
+  // Miss Shader
+  *d_miss =
+      new Gradient_Background(make_float3(1.f),               // white
+                              make_float3(0.5f, 0.7f, 1.f));  // light blue
+
+  const float3 lookfrom = make_float3(13.f, 2.f, 3.f);
+  const float3 lookat = make_float3(0.f, 0.f, 0.f);
+  *d_camera = new Camera(lookfrom,                      // lookfrom
+                         lookat,                        // lookat
+                         make_float3(0.f, 1.f, 0.f),    // upper axis
+                         30.f,                          // vertical fov
+                         float(width) / float(height),  // aspect ratio
+                         0.1f,                          // aperture
+                         10.f);                         // focus distance
+}
+
+/*G_FUNCTION void create_world(Hitable **d_list, Hitable **d_world,
                              Camera **d_camera, Miss **d_miss, float width,
                              float height) {
   if (threadIdx.x == 0 && blockIdx.x == 0) {
@@ -162,7 +218,7 @@ G_FUNCTION void create_world(Hitable **d_list, Hitable **d_world,
     d_list[i++] = new Sphere(make_float3(4, 1, 0), 1.f,
                              new Metal(make_float3(0.7f, 0.6f, 0.5f), 0.f));
 
-    *d_world = new Hitable_List(d_list, i);
+    //*d_world = new Hitable_List(d_list, i);
 
     const float3 lookfrom = make_float3(13.f, 2.f, 3.f);
     const float3 lookat = make_float3(0.f, 0.f, 0.f);
@@ -175,15 +231,15 @@ G_FUNCTION void create_world(Hitable **d_list, Hitable **d_world,
                            0.1f,                          // aperture
                            10.f);                         // focus distance
   }
-}
+}*/
 
-G_FUNCTION void free_world(Hitable **d_list, Hitable **d_world,
+/*G_FUNCTION void free_world(Hitable **d_list, Hitable **d_world,
                            Camera **d_camera, Miss **d_miss) {
   (*d_world)->free();
   delete *d_world;
   delete *d_camera;
   delete *d_miss;
-}
+}*/
 
 G_FUNCTION void render(float3 *fb, float3 *fb_acc,  // frame buffers
                        int width, int height,       // dimensions
@@ -217,7 +273,7 @@ G_FUNCTION void render(float3 *fb, float3 *fb_acc,  // frame buffers
   fb[pixel_index] = fb_acc[pixel_index];
 }
 
-int main() {
+/*int main() {
   const int samples = 10;                   // number of samples
   const int W = 1200, H = 800;              // Image dimensions
   const int TX = 8, TY = 8;                 // Block dimensions
@@ -232,17 +288,10 @@ int main() {
 
   // allocate and create world and camera
   Hitable **d_list;
-  const int N_hitables = 22 * 22 + 1 + 3;  // TODO: get it dynamically
-  checkCudaErrors(cudaMalloc((void **)&d_list, N_hitables * sizeof(Hitable *)));
   Hitable **d_world;
-  checkCudaErrors(cudaMalloc((void **)&d_world, sizeof(Hitable *)));
   Camera **d_camera;
-  checkCudaErrors(cudaMalloc((void **)&d_camera, sizeof(Camera *)));
   Miss **d_miss;
-  checkCudaErrors(cudaMalloc((void **)&d_miss, sizeof(Miss *)));
-  create_world<<<1, 1>>>(d_list, d_world, d_camera, d_miss, W, H);
-  checkCudaErrors(cudaGetLastError());
-  checkCudaErrors(cudaDeviceSynchronize());
+  create_world_host(d_list, d_world, d_camera, d_miss, W, H);
 
   clock_t start, stop;
   start = clock();
@@ -270,7 +319,7 @@ int main() {
 
   // clean up
   checkCudaErrors(cudaDeviceSynchronize());
-  free_world<<<1, 1>>>(d_list, d_world, d_camera, d_miss);
+  // free_world<<<1, 1>>>(d_list, d_world, d_camera, d_miss);
   checkCudaErrors(cudaGetLastError());
   checkCudaErrors(cudaDeviceSynchronize());
   checkCudaErrors(cudaFree(d_camera));
@@ -284,6 +333,69 @@ int main() {
   cudaDeviceReset();
 
   system("PAUSE");
+
+  return 0;
+}*/
+
+template <typename T>
+class unifiedArray {
+  const size_t length;
+  T *begin;
+
+ public:
+  __host__ unifiedArray(const size_t _length) : length(_length) {
+    cudaMallocManaged(&begin, length * sizeof(T));
+    cudaDeviceSynchronize();
+  }
+  __host__ __device__ ~unifiedArray() {
+    cudaDeviceSynchronize();
+    cudaFree(begin);
+  }
+  __host__ __device__ T &operator[](unsigned int index) {
+    return begin[index];  //*(begin+index)
+  }
+  unifiedArray(const unifiedArray &uarray) : length(uarray.length) {
+    cudaMallocManaged(&begin, length * sizeof(T));
+    memcpy((void *)begin, (void *)uarray.begin, length * sizeof(T));
+  }
+};
+
+template <typename T>
+__global__ void plusOne(T *arr, Camera &camera) {
+  int tid = threadIdx.x;
+  arr[tid] = arr[tid] + 1;
+  printf("%f\n", camera.lens_radius);
+}
+
+int main() {
+  int height = 500, width = 500;
+
+  const float3 lookfrom = make_float3(13.f, 2.f, 3.f);
+  const float3 lookat = make_float3(0.f, 0.f, 0.f);
+  Camera *d_camera = new Camera(lookfrom,                      // lookfrom
+                                lookat,                        // lookat
+                                make_float3(0.f, 1.f, 0.f),    // upper axis
+                                30.f,                          // vertical fov
+                                float(width) / float(height),  // aspect ratio
+                                0.1f,                          // aperture
+                                10.f);                         // focus distance
+
+  std::vector<Hitable *> hitables;  // hitable vector
+  unifiedArray<Hitable *> array();
+  Hitable **p = hitables.data();
+
+  unifiedArray<int> arr(10);
+  for (size_t i = 0; i < 10; i++) {
+    arr[i] = i;  // set the elements to 0,1,2...9
+  }
+
+  plusOne<<<1, 10>>>(&(arr[0]), *d_camera);  // add 1 to each element
+  cudaDeviceSynchronize();
+
+  for (size_t i = 0; i < 10; i++) {
+    std::cout << (arr[i]) << std::endl;  // the idea outputs should be
+                                         // 1,2,3...10.But the outputs is 0 to 9
+  }
 
   return 0;
 }

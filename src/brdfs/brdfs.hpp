@@ -52,11 +52,12 @@ D_FUNCTION float schlick(float cosine, float ref_idx) {
   return r0 + (1.f - r0) * powf(1.f - cosine, 5.f);
 }
 
-class BRDF {
+class BRDF : public Managed {
  public:
-  __device__ virtual bool scatter(const Ray& r_in, const Hit_Record& rec,
-                                  float3& attenuation, Ray& scattered,
-                                  uint& seed) const = 0;
+  __host__ __device__ virtual bool scatter(const Ray& r_in,
+                                           const Hit_Record& rec,
+                                           float3& attenuation, Ray& scattered,
+                                           uint& seed) const = 0;
 };
 
 #endif

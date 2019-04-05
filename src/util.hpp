@@ -23,7 +23,7 @@ inline __host__ __device__ void swap_values(T &a, T &b) {
 }
 
 // Removes nan values from vector
-inline __device__ float3 de_nan(const float3 &c) {
+inline __host__ __device__ float3 de_nan(const float3 &c) {
   float3 temp = c;
 
   if (!(temp.x == temp.x)) temp.x = 0.f;
@@ -33,7 +33,7 @@ inline __device__ float3 de_nan(const float3 &c) {
   return temp;
 }
 
-inline __device__ float get_component(const float3 &c, const int i) {
+inline __host__ __device__ float get_component(const float3 &c, const int i) {
   switch (i) {
     case 0:
       return c.x;

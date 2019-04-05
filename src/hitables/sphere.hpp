@@ -6,15 +6,15 @@
 
 class Sphere : public Hitable {
  public:
-  __device__ Sphere() {}
+  __host__ __device__ Sphere() {}
 
-  __device__ Sphere(float3 center, float radius, BRDF* brdf)
+  __host__ __device__ Sphere(float3 center, float radius, BRDF* brdf)
       : center(center), radius(radius), brdf(brdf){};
 
-  __device__ virtual bool hit(const Ray& r, float tmin, float tmax,
-                              Hit_Record& rec) const;
+  __host__ __device__ virtual bool hit(const Ray& r, float tmin, float tmax,
+                                       Hit_Record& rec) const;
 
-  __device__ virtual void free() const { delete brdf; }
+  __host__ __device__ virtual void free() const { delete brdf; }
 
   float3 center;
   float radius;
@@ -22,8 +22,8 @@ class Sphere : public Hitable {
 };
 
 // Sphere Intersection Function
-__device__ bool Sphere::hit(const Ray& ray, float t_min, float t_max,
-                            Hit_Record& rec) const {
+__host__ __device__ bool Sphere::hit(const Ray& ray, float t_min, float t_max,
+                                     Hit_Record& rec) const {
   float3 oc = ray.origin - center;
 
   float a = dot(ray.direction, ray.direction);
