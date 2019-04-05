@@ -151,7 +151,7 @@ void create_world_host(Hitable **d_list, Hitable **d_world, Camera **d_camera,
   hitables.push_back(new Sphere(make_float3(4, 1, 0), 1.f,
                                 new Metal(make_float3(0.7f, 0.6f, 0.5f), 0.f)));
 
-  *d_world = new Hitable_List(hitables.data(), hitables.size());
+  *d_world = new Hitable_List(hitables.size(), hitables.data());
 
   // Miss Shader
   *d_miss =
@@ -337,34 +337,45 @@ G_FUNCTION void render(float3 *fb, float3 *fb_acc,  // frame buffers
   return 0;
 }*/
 
+
 template <typename T>
 class unifiedArray {
   const size_t length;
   T *begin;
 
  public:
+  __host__ unifiedArray(const size_t _length, const T *arr) : length(_length) {
+    cudaMallocManaged((void **)&begin, length * sizeof(T));
+    cudaDeviceSynchronize();
+
+    memcpy((void *)begin, (void *)arr, length * sizeof(T));
+  }
+
   __host__ unifiedArray(const size_t _length) : length(_length) {
-    cudaMallocManaged(&begin, length * sizeof(T));
+    cudaMallocManaged((void **)&begin, length * sizeof(T));
     cudaDeviceSynchronize();
   }
+
   __host__ __device__ ~unifiedArray() {
     cudaDeviceSynchronize();
     cudaFree(begin);
   }
+  
   __host__ __device__ T &operator[](unsigned int index) {
     return begin[index];  //*(begin+index)
   }
+  
   unifiedArray(const unifiedArray &uarray) : length(uarray.length) {
-    cudaMallocManaged(&begin, length * sizeof(T));
+    cudaMallocManaged((void **)&begin, length * sizeof(T));
     memcpy((void *)begin, (void *)uarray.begin, length * sizeof(T));
   }
 };
 
 template <typename T>
-__global__ void plusOne(T *arr, Camera &camera) {
+__global__ void plusOne(T *arr, Camera &camera, Hitable *array) {
   int tid = threadIdx.x;
   arr[tid] = arr[tid] + 1;
-  printf("%f\n", camera.lens_radius);
+  printf("%f %d %d\n", camera.lens_radius, array->index, array->sum());
 }
 
 int main() {
@@ -381,21 +392,28 @@ int main() {
                                 10.f);                         // focus distance
 
   std::vector<Hitable *> hitables;  // hitable vector
-  unifiedArray<Hitable *> array();
-  Hitable **p = hitables.data();
+
+  hitables.push_back(new Sphere(make_float3(0.f, 1.f, 0.f), 1.f, new Glass(make_float3(1.f), 1.5f), 0));
+  hitables.push_back(new Sphere(make_float3(0.f, 1.f, 0.f), 1.f, new Glass(make_float3(1.f), 1.5f), 1));
+
+  Hitable *array = new Hitable_List(hitables.size(), hitables, 2);
+
+  // I can access the head of list but I can't access the list members
 
   unifiedArray<int> arr(10);
   for (size_t i = 0; i < 10; i++) {
     arr[i] = i;  // set the elements to 0,1,2...9
   }
 
-  plusOne<<<1, 10>>>(&(arr[0]), *d_camera);  // add 1 to each element
+  plusOne<<<1, 10>>>(&(arr[0]), *d_camera, array);  // add 1 to each element
   cudaDeviceSynchronize();
 
   for (size_t i = 0; i < 10; i++) {
     std::cout << (arr[i]) << std::endl;  // the idea outputs should be
                                          // 1,2,3...10.But the outputs is 0 to 9
   }
+
+  system("PAUSE");
 
   return 0;
 }

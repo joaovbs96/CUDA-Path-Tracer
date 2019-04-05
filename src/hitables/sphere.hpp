@@ -6,15 +6,17 @@
 
 class Sphere : public Hitable {
  public:
-  __host__ __device__ Sphere() {}
+  __host__ __device__ Sphere() : Hitable(0) {}
 
-  __host__ __device__ Sphere(float3 center, float radius, BRDF* brdf)
-      : center(center), radius(radius), brdf(brdf){};
+  __host__ __device__ Sphere(float3 center, float radius, BRDF* brdf, int index = 0)
+      : center(center), radius(radius), brdf(brdf), Hitable(index) {};
 
   __host__ __device__ virtual bool hit(const Ray& r, float tmin, float tmax,
                                        Hit_Record& rec) const;
 
   __host__ __device__ virtual void free() const { delete brdf; }
+
+  __host__ __device__ virtual int sum() const { return 0; }
 
   float3 center;
   float radius;

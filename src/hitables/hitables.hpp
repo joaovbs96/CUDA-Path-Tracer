@@ -17,10 +17,16 @@ struct Hit_Record {
 
 class Hitable : public Managed {
  public:
+ __host__ __device__ Hitable(int index) : index(index) {}
+
   __host__ __device__ virtual bool hit(const Ray& r, float t_min, float t_max,
                                        Hit_Record& rec) const = 0;
 
   __host__ __device__ virtual void free() const = 0;
+
+  __host__ __device__ virtual int sum() const = 0;
+
+  int index;
 };
 
 #endif
